@@ -1,9 +1,10 @@
 const Minio = require('minio');
 const mime = require("mime-types");
+const utils = require("./utils");
 
 module.exports = {
   init(providerOptions) {
-    const { port, useSSL, endPoint, accessKey, secretKey, bucket, host, folder } = providerOptions;
+    const { port, useSSL, endPoint, accessKey, secretKey, bucket, host, folder, isPrivateBucket, presignedUrlExpiration } = providerOptions;
     const MINIO = new Minio.Client({
       endPoint,
       port: +port || 9000,
@@ -11,6 +12,9 @@ module.exports = {
       accessKey,
       secretKey,
     });
+
+    const ACL = ACL || "public-read";
+
     const getUploadPath = (file) => {
       const pathChunk = file.path ? `${file.path}/` : '';
       const path = folder ? `${folder}/${pathChunk}` : pathChunk;
@@ -68,6 +72,28 @@ module.exports = {
           });
         });
       },
+      getSignedUrl(file) {
+        const { file_url_bucket } = utils.getBucketFromUrl(file.url);
+        if (file_url_bucket !== bucket) {
+          return { url: file.url };
+        }
+
+        return new Promise((resolve, reject) => {
+          const uploadPath = utils.getUploadPath(file);
+
+          MINIO.presignedUrl('GET', bucket, uploadPath, presignedUrlExpiration || 24*60*60, function(err, presignedUrl) {
+            if (err) {
+              return reject(err);
+            }
+            resolve({ presignedUrl });
+          });
+
+         
+        });
+      },
+      isPrivate() {
+        return isPrivateBucket;
+      }
     };
   },
 };
